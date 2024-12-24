@@ -41,11 +41,28 @@ async function getUser(user_id) {
 // Managing messages-room
 async function createChatRoom(room_name, created_by, is_private = false, password = null) {
     const chatroom_id = generateRandomString();
-    const result = await pool.query(
-        'INSERT INTO chatrooms (chatroom_id, room_name, created_by, is_private, password) VALUES (?, ?, ?, ?, ?)',
-        [chatroom_id, room_name, created_by, is_private, password]
-    );
-    return result;
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        
+        const result = await connection.query(
+            'INSERT INTO chatrooms (chatroom_id, room_name, created_by, is_private, password) VALUES (?, ?, ?, ?, ?)',
+            [chatroom_id, room_name, created_by, is_private, password]
+        );
+
+        await connection.query(
+            'INSERT INTO userchatroom (user_id, chatroom_id) VALUES (?, ?)',
+            [created_by, chatroom_id]
+        );
+
+        await connection.commit();
+        return result;
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
 }
 
 async function getChatRoomsForUser(user_id) {
@@ -56,17 +73,30 @@ async function getChatRoomsForUser(user_id) {
     return rows;
 }
 
+async function createChatMessage(chatroom_id, user_id, content) {
+    const message_id = generateRandomString();
+    const result = await pool.query(
+        'INSERT INTO chatmessages (message_id, chatroom_id, user_id, content) VALUES (?, ?, ?, ?)',
+        [message_id, chatroom_id, user_id, content]
+    );
+    return result;
+}
+
+async function getChatMessages(chatroom_id) {
+    const [rows] = await pool.query(
+        'SELECT * FROM chatmessages WHERE chatroom_id = ? ORDER BY timestamp ASC',
+        [chatroom_id]
+    );
+    return rows;
+}
+
 module.exports = {
     createUser,
     getUser,
     createChatRoom,
-    getChatRoomsForUser
-}
-
-
-module.exports = {
-    createUser,
-    getUser
+    getChatRoomsForUser,
+    createChatMessage,
+    getChatMessages
 }
 
 
