@@ -1,4 +1,9 @@
 const mysql = require('mysql2');
+const {
+    simpleHash,
+    decryptHash,
+    generateRandomString
+} = require('./crypt-helper')
 
 const dotenv = require('dotenv');
 dotenv.config();
@@ -12,25 +17,21 @@ const pool = mysql.createPool(
     }
 ).promise()
 
-function generateRandomString() {
-    const length = Math.floor(Math.random() * 37);
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-        result += characters.charAt(Math.floor(Math.random() * characters.length));
-    }
-    return result;
-}
-
-
 // Managing user
 
 async function createUser(username, email, password) {
+    encrypted_pass = simpleHash(password);
     const result = await pool.query(
         'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-        [username, email, password]
+        [username, email, encrypted_pass]
     )
     return result;
+}
+
+async function authorizeUser(email, password) {
+    check_pass = simpleHash(password);
+    const [rows] = await pool.query('SELECT * FROM users WHERE email = ? AND password = ?', [email, check_pass]);
+    return rows;
 }
 
 async function getUser(user_id) {
@@ -90,16 +91,27 @@ async function getChatMessages(chatroom_id) {
     return rows;
 }
 
+async function insertUserChatroom(user_id, chatroom_id) {
+    const result = await pool.query(
+        'INSERT INTO userchatroom (user_id, chatroom_id) VALUES (?, ?)',
+        [user_id, chatroom_id]
+    );
+    return result;
+    
+}
+
 module.exports = {
     createUser,
     getUser,
     createChatRoom,
     getChatRoomsForUser,
     createChatMessage,
-    getChatMessages
+    getChatMessages,
+    insertUserChatroom
 }
 
 
-// createUser('bob2','bob2@gmail.com','password').then(result => console.log(result)).catch(err => console.error(err));
+//createUser('bob3','bob3@gmail.com','password').then(result => console.log(result)).catch(err => console.error(err));
 
 //  getUser(3).then(result => console.log(result)).catch(err => console.error(err));
+// authorizeUser('bob3@gmail.com', 'password').then(result => console.log(result)).catch(err => console.error(err));
