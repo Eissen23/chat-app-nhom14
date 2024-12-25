@@ -10,6 +10,9 @@ function generateRandomString() {
 
 function simpleHash(str) {
     let hash = '';
+    if (typeof str !== 'string') {
+        str = String(str);
+    }
     for (let i = 0; i < str.length; i++) {
         const charCode = str.charCodeAt(i).toString(16);
         hash += charCode.padStart(4, '0');

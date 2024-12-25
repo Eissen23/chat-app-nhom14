@@ -21,11 +21,15 @@ const pool = mysql.createPool(
 
 async function createUser(username, email, password) {
     encrypted_pass = simpleHash(password);
-    const result = await pool.query(
+    const [result] = await pool.query(
         'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
         [username, email, encrypted_pass]
     )
-    return result;
+    return {
+        id: result.insertId,
+        username,
+        email
+    };
 }
 
 async function authorizeUser(email, password) {
@@ -40,15 +44,18 @@ async function getUser(user_id) {
 }
 
 // Managing messages-room
-async function createChatRoom(room_name, created_by, is_private = false, password = null) {
+async function createChatRoom(room_name, created_by, password = null) {
     const chatroom_id = generateRandomString();
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
         
+        if (password != null) {
+            password = simpleHash(password);
+        }
         const result = await connection.query(
-            'INSERT INTO chatrooms (chatroom_id, room_name, created_by, is_private, password) VALUES (?, ?, ?, ?, ?)',
-            [chatroom_id, room_name, created_by, is_private, password]
+            'INSERT INTO chatrooms (chatroom_id, room_name, created_by, password) VALUES (?, ?, ?, ?)',
+            [chatroom_id, room_name, created_by, password]
         );
 
         await connection.query(
@@ -57,13 +64,38 @@ async function createChatRoom(room_name, created_by, is_private = false, passwor
         );
 
         await connection.commit();
-        return result;
+        return {
+            id: result.insertId,
+            chatroom_id,
+            room_name,
+            created_by,
+        };
     } catch (error) {
         await connection.rollback();
         throw error;
     } finally {
         connection.release();
     }
+}
+
+async function joinChatRoom(user_id, chatroom_id) {
+    const result = await pool.query(
+        'INSERT INTO userchatroom (user_id, chatroom_id) VALUES (?, ?)',
+        [user_id, chatroom_id]
+    );
+    return {
+        id: result.affectedRows,
+        user: user_id,
+        chatroom: chatroom_id
+    };
+}
+
+async function getChatRoomById(chatroom_id) {
+    const [rows] = await pool.query(
+        'SELECT * FROM chatrooms WHERE chatroom_id = ?',
+        [chatroom_id]
+    );
+    return rows[0];
 }
 
 async function getChatRoomsForUser(user_id) {
@@ -91,23 +123,25 @@ async function getChatMessages(chatroom_id) {
     return rows;
 }
 
-async function insertUserChatroom(user_id, chatroom_id) {
-    const result = await pool.query(
-        'INSERT INTO userchatroom (user_id, chatroom_id) VALUES (?, ?)',
+async function isUserInChatRoom(user_id, chatroom_id) {
+    const [rows] = await pool.query(
+        'SELECT 1 FROM userchatroom WHERE user_id = ? AND chatroom_id = ? LIMIT 1',
         [user_id, chatroom_id]
     );
-    return result;
-    
+    return rows.length > 0;
 }
 
 module.exports = {
     createUser,
     getUser,
     createChatRoom,
+    joinChatRoom,
+    getChatRoomById,
     getChatRoomsForUser,
     createChatMessage,
     getChatMessages,
-    insertUserChatroom
+    isUserInChatRoom,
+    authorizeUser
 }
 
 
